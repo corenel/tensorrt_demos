@@ -87,7 +87,7 @@ def set_net_batch(network, batch_size):
     return network
 
 
-def build_engine(model_name, do_int8, dla_core, verbose=False, batch_size=(1,1,1)):
+def build_engine(model_name, do_fp16, do_int8, dla_core, verbose=False, batch_size=(1,1,1)):
     """Build a TensorRT engine from ONNX using the older API."""
     cfg_file_path = model_name + '.cfg'
     parser = DarkNetParser()
@@ -105,6 +105,8 @@ def build_engine(model_name, do_int8, dla_core, verbose=False, batch_size=(1,1,1
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(*EXPLICIT_BATCH) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
         if do_int8 and not builder.platform_has_fast_int8:
             raise RuntimeError('INT8 not supported on this platform')
+        if do_fp16 and not builder.platform_has_fast_fp16:
+            raise RuntimeError('FP16 not supported on this platform')
         if not parser.parse(onnx_data):
             print('ERROR: Failed to parse the ONNX file.')
             for error in range(parser.num_errors):
@@ -122,7 +124,7 @@ def build_engine(model_name, do_int8, dla_core, verbose=False, batch_size=(1,1,1
                 raise RuntimeError('DLA core not supported by old API')
             builder.max_batch_size = batch_size[2]
             builder.max_workspace_size = 1 << 30
-            if builder.platform_has_fast_fp16:
+            if do_fp16 and builder.platform_has_fast_fp16:
                 print('use fp16')
                 builder.fp16_mode = True  # alternative: builder.platform_has_fast_fp16
             if do_int8:
@@ -136,7 +138,7 @@ def build_engine(model_name, do_int8, dla_core, verbose=False, batch_size=(1,1,1
             config = builder.create_builder_config()
             config.max_workspace_size = 1 << 30
             config.set_flag(trt.BuilderFlag.GPU_FALLBACK)
-            if builder.platform_has_fast_fp16:
+            if do_fp16 and builder.platform_has_fast_fp16:
                 print('use fp16')
                 config.set_flag(trt.BuilderFlag.FP16)
             profile = builder.create_optimization_profile()
@@ -181,6 +183,9 @@ def main():
               '{dimension} could be either a single number (e.g. '
               '288, 416, 608) or 2 numbers, WxH (e.g. 416x256)'))
     parser.add_argument(
+        '--fp16', action='store_true',
+        help='build FP16 TensorRT engine')
+    parser.add_argument(
         '--int8', action='store_true',
         help='build INT8 TensorRT engine')
     parser.add_argument(
@@ -195,7 +200,7 @@ def main():
     args = parser.parse_args()
 
     engine = build_engine(
-        args.model, args.int8, args.dla_core, args.verbose, (args.min_batch_size,args.opt_batch_size,args.max_batch_size))
+        args.model, args.fp16, args.int8, args.dla_core, args.verbose, (args.min_batch_size,args.opt_batch_size,args.max_batch_size))
     if engine is None:
         raise SystemExit('ERROR: failed to build the TensorRT engine!')
 
