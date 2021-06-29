@@ -402,7 +402,7 @@ class WeightLoader(object):
 class GraphBuilderONNX(object):
     """Class for creating an ONNX graph from a previously generated list of layer dictionaries."""
 
-    def __init__(self, model_name, output_tensors):
+    def __init__(self, model_name, output_tensors, batch_size):
         """Initialize with all DarkNet default parameters used creating
         YOLO, and specify the output tensors as an OrderedDict for their
         output dimensions with their names as keys.
@@ -421,7 +421,7 @@ class GraphBuilderONNX(object):
         self.alpha_lrelu = 0.1
         self.param_dict = OrderedDict()
         self.major_node_specs = list()
-        self.batch_size = MAX_BATCH_SIZE
+        self.batch_size = batch_size
         self.route_spec = 0  # keeping track of the current active 'route'
 
     def build_onnx_graph(
@@ -884,6 +884,9 @@ def main():
         help=('[yolov3|yolov3-tiny|yolov3-spp|yolov4|yolov4-tiny]-'
               '[{dimension}], where dimension could be a single '
               'number (e.g. 288, 416, 608) or WxH (e.g. 416x256)'))
+    parser.add_argument(
+        '-b', '--batch_size', type=int, default=1,
+        help='batch size [1]')
     args = parser.parse_args()
     if args.category_num <= 0:
         raise SystemExit('ERROR: bad category_num (%d)!' % args.category_num)
@@ -960,7 +963,7 @@ def main():
     # Create a GraphBuilderONNX object with the specified output tensor
     # dimensions.
     print('Building ONNX graph...')
-    builder = GraphBuilderONNX(args.model, output_tensor_dims)
+    builder = GraphBuilderONNX(args.model, output_tensor_dims, args.batch_size)
 
     # Now generate an ONNX graph with weights from the previously parsed
     # layer configurations and the weights file.
